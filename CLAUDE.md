@@ -57,11 +57,20 @@ scrape → dedupe against seen-set → keyword filter → Telegram notify → pe
   optional `STATE_FILE`. Local `.env` is hook-protected — the user edits it themselves; for
   ad-hoc local runs pass env vars inline instead.
 
-## Deployment (Railway)
+## Deployment
 
-Deployed to Railway project **maybelline-fb-watcher** (`836e5c0c-11de-46f7-8ef3-5b94cf5cc4ac`),
+**Primary hosting: the owner's home PC via Docker Compose** (`docker compose up -d --build`,
+see README.md) — chosen because Facebook login-walls all datacenter IPs, and only a residential
+IP can scrape. State persists in the `watcher-state` named volume; `restart: unless-stopped`
+plus Docker Desktop autostart covers reboots. GitHub remote:
+`github.com/Adam903PL/maybelline-facebook-watcher`.
+
+### Legacy Railway deployment (superseded, blind due to the IP wall)
+
+Railway project **maybelline-fb-watcher** (`836e5c0c-11de-46f7-8ef3-5b94cf5cc4ac`),
 service **watcher** (`dacb1c07-e7a9-4ab9-8431-417987cc8491`), env `production`, workspace
-"WebWind Projects". Volume `watcher-volume` mounted at `/data`.
+"WebWind Projects". Volume `watcher-volume` mounted at `/data`. Idles in 10-min backoff;
+delete it if the owner confirms, to stop billing.
 
 - `railway.json` is the source of truth for deploy config: Dockerfile builder,
   `restartPolicyType: ALWAYS`, `sleepApplication: false` (**owner requires sleeping disabled**).

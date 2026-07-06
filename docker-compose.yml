@@ -1,0 +1,16 @@
+services:
+  watcher:
+    build: .
+    container_name: maybelline-fb-watcher
+    env_file: .env
+    environment:
+      STATE_FILE: /data/state.json
+    volumes:
+      - watcher-state:/data
+    # Chromium needs a real /dev/shm and a zombie-process reaper
+    shm_size: 1gb
+    init: true
+    restart: unless-stopped
+
+volumes:
+  watcher-state:
