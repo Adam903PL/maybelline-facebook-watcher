@@ -72,46 +72,37 @@ IP can scrape. State persists in the `watcher-state` named volume; `restart: unl
 plus Docker Desktop autostart covers reboots. GitHub remote:
 `github.com/Adam903PL/maybelline-facebook-watcher`.
 
-### Legacy Railway deployment (superseded, blind due to the IP wall)
-
-Railway project **maybelline-fb-watcher** (`836e5c0c-11de-46f7-8ef3-5b94cf5cc4ac`),
-service **watcher** (`dacb1c07-e7a9-4ab9-8431-417987cc8491`), env `production`, workspace
-"WebWind Projects". Volume `watcher-volume` mounted at `/data`. Idles in 10-min backoff;
-delete it if the owner confirms, to stop billing.
-
-- `railway.json` is the source of truth for deploy config: Dockerfile builder,
-  `restartPolicyType: ALWAYS`, `sleepApplication: false` (**owner requires sleeping disabled**).
 - The `Dockerfile` base image tag (`mcr.microsoft.com/playwright:vX.Y.Z-noble`) **must match the
   `playwright` version in package.json**, or the npm package won't find the browsers.
-- Deploy: `railway up --service watcher --detach`, then poll
-  `railway deployment list --json` until `SUCCESS`; verify with `railway logs --service watcher`.
-- No domain/healthcheck — headless worker, no HTTP server.
-- Known gotcha: the Railway **MCP server** can hold stale credentials from session start (reads
-  work, mutations fail with Unauthorized, or land on the wrong account). If that happens, use
-  the Railway CLI; a session restart refreshes MCP auth.
+
+### Railway (DELETED 2026-07-07)
+
+The legacy Railway project was **deleted with owner confirmation on 2026-07-07** (it was blind
+behind the datacenter-IP wall and its hourly failure alerts were being mistaken for home-PC
+failures). `railway.json` is kept in the repo in case cloud hosting is revisited
+(`sleepApplication: false` — owner requires sleeping disabled). If redeploying to any
+datacenter, a static residential/ISP proxy is mandatory (see Operational notes). Known gotcha:
+the Railway **MCP server** can hold stale credentials from session start — use the Railway CLI
+or GraphQL with the token at `~/.railway/config.json` `.user.accessToken`.
 
 ## Operational notes
 
-- **2026-07-07: the home PC's residential IP got login-walled too** after ~a day of 60s polling
-  (alert: 130 consecutive failures, both scrape paths). Dev machine's residential IP still
-  scraped fine at the same time, so it's a per-IP flag, not a Facebook-wide change. Root cause
-  of the *persistence*: `resetSession()` ran after every failed poll → fresh anonymous identity
-  per poll → wall never lifted. Mitigations shipped: session-reset throttle (30 min), extended
-  backoff tier (30-min polls after 20 failures), failure evidence dumps to `/data`. Fastest
-  user-side recovery: router restart (new dynamic IP).
-- **Railway status (2026-07-06): blocked by Facebook's datacenter-IP wall.** Facebook serves a
-  login page instead of content to cloud IPs — confirmed on Railway EU (default) and us-east4,
-  on both the main page and the Page Plugin embed. Everything else works (verified end-to-end
-  from a residential IP). The owner chose to leave the deployment idling in backoff mode
-  (10-minute polls after 5 consecutive failures) rather than buy a proxy yet.
-- **The fix when the owner is ready**: a flat-rate static residential/ISP proxy. Wire it as a
-  `PROXY_URL` env var passed to `chromium.launch({ proxy })` in `src/scrape.js`, set the
-  variable on the Railway service, redeploy. Consumer VPNs do NOT work (datacenter exit IPs,
-  and Railway containers have no TUN device). Plain-HTTP fetching doesn't work either — the
-  Page Plugin is client-side rendered (verified: raw HTML contains zero post content).
-- The service region was moved to `us-east4` via GraphQL (`serviceInstanceUpdate`); the CLI
-  token for such calls lives at `~/.railway/config.json` under `.user.accessToken` (the
-  skill's api script expects the outdated `.user.token` key).
+- **2026-07-07 false-alarm postmortem**: the "scraping failed 130/136 times in a row" Telegram
+  alerts came from the still-running **legacy Railway watcher** (blind behind the IP wall,
+  10-min backoff polls = ~6 failures/hour, alert cooldown 1 h), NOT from the home PC — the home
+  PC polled `Poll OK` the whole time. Lesson: with two deployments sharing one Telegram bot,
+  alerts are unattributable; if a second deployment ever exists again, put a hostname tag in
+  the alert text. The Railway project was deleted to end the spam.
+- **Home PC quirk (open, 2026-07-07)**: its polls see only **1 unique post** per scrape
+  (dev machine sees 10 with identical code) — Facebook serves that IP a limited/teaser page
+  variant. Detection still works because a new post lands on top, but a *pinned* post would
+  mask newer ones. If it persists, consider a warning + periodic session refresh on low counts.
+- **Facebook login-walls all datacenter IPs** — confirmed 2026-07-06 on Railway EU and
+  us-east4, on both the main page and the Page Plugin embed. Only residential IPs can scrape.
+  If cloud hosting is ever revisited: flat-rate static residential/ISP proxy wired as a
+  `PROXY_URL` env var passed to `chromium.launch({ proxy })` in `src/scrape.js`. Consumer VPNs
+  do NOT work (datacenter exit IPs, no TUN in containers). Plain-HTTP fetching doesn't work
+  either — the Page Plugin is client-side rendered (raw HTML contains zero post content).
 - `state.json` / the `/data` volume is runtime state — never commit it, never reset it casually
   (a reset re-seeds silently, which is safe but loses nothing; a *deleted seeded flag with kept
   history* is not a state that occurs naturally).
