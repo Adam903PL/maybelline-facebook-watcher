@@ -75,6 +75,10 @@ Just make sure Docker Desktop itself launches on login:
 
 ## How it behaves
 
+- **Every start** sends one 🟢 Telegram message with the device name it's running on, and
+  failure alerts are tagged `[device]` too — so you always know which deployment is talking.
+  The name comes from `DEVICE_NAME` (docker-compose passes your computer name automatically;
+  override it in `docker-compose.yml` if you want a friendlier label).
 - **First run**: all posts currently visible on the page are recorded silently (no notification
   spam for old posts). From then on, only genuinely new posts notify.
 - **Already-seen posts survive restarts** — state lives in the `watcher-state` Docker volume.

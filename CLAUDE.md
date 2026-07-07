@@ -56,6 +56,9 @@ scrape → dedupe against seen-set → keyword filter → Telegram notify → pe
   Railway). The `seeded` flag makes the first run record all visible posts without notifying.
 - `src/index.js` — after 10 consecutive scrape failures sends a Telegram alert (max 1/hour).
   Backoff tiers: ≥5 failures → 10-min polls, ≥20 → 30-min polls; back to 60s on first success.
+  Every start sends a 🟢 Telegram message and alerts are tagged with `DEVICE_NAME` (env,
+  falls back to `os.hostname()`; docker-compose passes the host's `COMPUTERNAME`) — the
+  2026-07-07 postmortem lesson: untagged alerts from two deployments are unattributable.
 - `src/log.js` — ISO-timestamped `log/warn/error` used everywhere (don't add bare `console.*`).
 
 ## Secrets & env

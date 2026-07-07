@@ -1,4 +1,5 @@
 import {
+  DEVICE_NAME,
   KEYWORDS,
   POLL_INTERVAL_MS,
   STATE_FILE,
@@ -72,8 +73,18 @@ async function main() {
   const runOnce = process.argv.includes('--once');
   const state = await loadState(STATE_FILE);
   log(
-    `Watcher starting (state: ${STATE_FILE}, seeded: ${state.seeded}, seen: ${state.seen.size}).`,
+    `Watcher starting on "${DEVICE_NAME}" (state: ${STATE_FILE}, seeded: ${state.seeded}, seen: ${state.seen.size}).`,
   );
+
+  // One startup message per launch so every deployment identifies itself —
+  // a failed courtesy message must not kill the watcher, hence the catch.
+  try {
+    await sendMessage(
+      `🟢 maybelline-fb-watcher wystartował na: ${DEVICE_NAME}\n(zapamiętane posty: ${state.seen.size}, interwał: ${POLL_INTERVAL_MS / 1000}s)`,
+    );
+  } catch (err) {
+    error(`Could not send startup message: ${err.message ?? err}`);
+  }
 
   let consecutiveFailures = 0;
   let lastFailureAlertAt = 0;
@@ -108,7 +119,7 @@ async function main() {
         lastFailureAlertAt = Date.now();
         try {
           await sendMessage(
-            `⚠️ maybelline-fb-watcher: scraping failed ${consecutiveFailures} times in a row. Last error: ${String(err).slice(0, 500)}`,
+            `⚠️ maybelline-fb-watcher [${DEVICE_NAME}]: scraping failed ${consecutiveFailures} times in a row. Last error: ${String(err).slice(0, 500)}`,
           );
         } catch (alertErr) {
           error(`Failed to send failure alert: ${alertErr}`);

@@ -5,6 +5,11 @@ services:
     env_file: .env
     environment:
       STATE_FILE: /data/state.json
+      # Shown in the Telegram startup message and failure alerts so you know
+      # WHICH machine is talking. Inside Docker the hostname is a random
+      # container id, so the host's computer name is passed in here
+      # (COMPUTERNAME is set on Windows; edit the fallback to taste).
+      DEVICE_NAME: ${COMPUTERNAME:-home-pc-docker}
     volumes:
       - watcher-state:/data
     # Chromium needs a real /dev/shm and a zombie-process reaper
