@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import path from 'node:path';
 
 export const PAGE_URL = 'https://www.facebook.com/maybellinepolska?locale=pl_PL';
 
@@ -52,3 +53,9 @@ export const KEYWORDS = [
 export const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 export const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 export const STATE_FILE = process.env.STATE_FILE ?? './state.json';
+
+// Where failed-scrape evidence (screenshot + HTML of whatever Facebook served)
+// is written. Defaults next to the state file so it lands on the persistent
+// volume in Docker and can be copied out with `docker compose cp`.
+export const EVIDENCE_DIR =
+  process.env.EVIDENCE_DIR ?? path.dirname(STATE_FILE);

@@ -1,5 +1,8 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { chromium } from 'playwright';
-import { PAGE_URL } from './config.js';
+import { EVIDENCE_DIR, PAGE_URL } from './config.js';
+import { log, warn } from './log.js';
 
 // Facebook's embeddable Page Plugin renders the page timeline without login
 // and is served even when the main page is login-walled (which Facebook does
@@ -27,6 +30,7 @@ async function getPage() {
     context = null;
   }
   if (!context) {
+    log('Starting a new browser session (fresh anonymous identity).');
     context = await browser.newContext({
       locale: 'pl-PL',
       viewport: { width: 1280, height: 1600 },
@@ -64,6 +68,23 @@ export async function closeBrowser() {
   }
 }
 
+// Dump what Facebook actually served (screenshot + full HTML) so a failure
+// can be diagnosed after the fact. Overwrites the previous dump for the same
+// source, so disk usage stays bounded. Best-effort: evidence saving must
+// never turn a scrape failure into a different failure.
+export async function saveEvidence(p, source) {
+  try {
+    await mkdir(EVIDENCE_DIR, { recursive: true });
+    const png = path.join(EVIDENCE_DIR, `last-failure-${source}.png`);
+    const html = path.join(EVIDENCE_DIR, `last-failure-${source}.html`);
+    await p.screenshot({ path: png, fullPage: true });
+    await writeFile(html, await p.content());
+    log(`Saved failure evidence: ${png} and ${html}`);
+  } catch (err) {
+    warn(`Could not save failure evidence for ${source}: ${err.message}`);
+  }
+}
+
 async function renderTimeoutError(p, what) {
   // Fail loud WITH evidence: what did Facebook serve instead of the feed?
   const title = await p.title().catch(() => '<unreadable>');
@@ -91,6 +112,7 @@ function canonicalizePosts(rawPosts) {
 
 async function scrapeMainPage(p) {
   await p.goto(PAGE_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  log(`Main page loaded (title: "${await p.title().catch(() => '?')}").`);
 
   // The cookie-consent dialog only shows on the session's first visit in some
   // regions; its absence is normal, so a click timeout here is not an error.
@@ -109,6 +131,7 @@ async function scrapeMainPage(p) {
   try {
     await p.waitForSelector('[role="article"]', { timeout: 20_000 });
   } catch {
+    await saveEvidence(p, 'main');
     throw await renderTimeoutError(p, 'Main page articles');
   }
 
@@ -158,17 +181,23 @@ async function scrapeMainPage(p) {
       .filter((post) => post.url && post.text),
   );
 
-  return canonicalizePosts(rawPosts);
+  const posts = canonicalizePosts(rawPosts);
+  log(
+    `Main page: ${rawPosts.length} article nodes with post permalinks, ${posts.length} unique posts.`,
+  );
+  return posts;
 }
 
 async function scrapePlugin(p) {
   await p.goto(PLUGIN_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  log(`Page Plugin loaded (title: "${await p.title().catch(() => '?')}").`);
   try {
     await p.waitForSelector(
       'a[href*="/posts/"], a[href*="/reel"], a[href*="/videos/"]',
       { timeout: 20_000 },
     );
   } catch {
+    await saveEvidence(p, 'plugin');
     throw await renderTimeoutError(p, 'Page Plugin posts');
   }
   await p.waitForTimeout(2_000);
@@ -229,11 +258,19 @@ export async function scrapePosts() {
   try {
     posts = await scrapeMainPage(p);
   } catch (mainErr) {
-    console.warn(
+    warn(
       `Main page scrape failed (${mainErr.message}) — falling back to the Page Plugin.`,
     );
-    posts = await scrapePlugin(p);
-    console.log(`Page Plugin fallback returned ${posts.length} posts.`);
+    try {
+      posts = await scrapePlugin(p);
+    } catch (pluginErr) {
+      // Surface BOTH failures — the alert previously showed only the plugin
+      // error, hiding why the primary path broke.
+      throw new Error(
+        `Both scrape paths failed. Main page: ${mainErr.message} | Page Plugin: ${pluginErr.message}`,
+      );
+    }
+    log(`Page Plugin fallback returned ${posts.length} posts.`);
   }
 
   if (posts.length === 0) {
