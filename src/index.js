@@ -6,6 +6,7 @@ import {
   TELEGRAM_CHAT_ID,
 } from './config.js';
 import { isFromLastDay, matchedKeyword, stripPageHeader } from './filter.js';
+import { error, log } from './log.js';
 import { closeBrowser, resetSession, scrapePosts } from './scrape.js';
 import { loadState, saveState } from './state.js';
 import { sendMessage } from './telegram.js';
@@ -14,12 +15,20 @@ const FAILURE_ALERT_THRESHOLD = 10;
 const FAILURE_ALERT_COOLDOWN_MS = 60 * 60 * 1000;
 // Facebook walls IPs that keep hammering while blocked; once several polls in
 // a row fail, slow down to give the wall a chance to lift, and return to the
-// normal cadence on the first success.
+// normal cadence on the first success. A long streak slows down further —
+// a wall that survives 20 polls won't lift in minutes.
 const BACKOFF_THRESHOLD = 5;
 const BACKOFF_INTERVAL_MS = 10 * 60 * 1000;
+const EXTENDED_BACKOFF_THRESHOLD = 20;
+const EXTENDED_BACKOFF_INTERVAL_MS = 30 * 60 * 1000;
+// Resetting the session after EVERY failed poll means hitting Facebook with a
+// brand-new anonymous identity each time — the exact pattern its anti-bot
+// wall escalates on, turning one transient failure into a self-sustaining
+// streak. During a streak, keep the session and reset at most this often.
+const SESSION_RESET_COOLDOWN_MS = 30 * 60 * 1000;
 
 if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-  console.error(
+  error(
     'Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID — set them in .env (local) or service variables (Railway).',
   );
   process.exit(1);
@@ -32,7 +41,7 @@ async function pollOnce(state) {
     for (const post of posts) state.seen.add(post.id);
     state.seeded = true;
     await saveState(STATE_FILE, state);
-    console.log(
+    log(
       `First run: seeded ${posts.length} existing posts, no notifications sent.`,
     );
     return;
@@ -43,18 +52,18 @@ async function pollOnce(state) {
   for (const post of newPosts) {
     const keyword = matchedKeyword(stripPageHeader(post.text), KEYWORDS);
     if (keyword && !isFromLastDay(post.text)) {
-      console.log(`Skipping old matching post (late DOM appearance): ${post.url}`);
+      log(`Skipping old matching post (late DOM appearance): ${post.url}`);
     } else if (keyword) {
       await sendMessage(
         `🆕 Maybelline Polska — nowy post pasuje do „${keyword}"\n\n${post.text.slice(0, 500)}\n\n${post.url}`,
       );
       notified += 1;
-      console.log(`Notified: ${post.url} (keyword: ${keyword})`);
+      log(`Notified: ${post.url} (keyword: ${keyword})`);
     }
     state.seen.add(post.id);
   }
   await saveState(STATE_FILE, state);
-  console.log(
+  log(
     `Poll OK: ${posts.length} posts visible, ${newPosts.length} new, ${notified} matched.`,
   );
 }
@@ -62,12 +71,13 @@ async function pollOnce(state) {
 async function main() {
   const runOnce = process.argv.includes('--once');
   const state = await loadState(STATE_FILE);
-  console.log(
+  log(
     `Watcher starting (state: ${STATE_FILE}, seeded: ${state.seeded}, seen: ${state.seen.size}).`,
   );
 
   let consecutiveFailures = 0;
   let lastFailureAlertAt = 0;
+  let lastSessionResetAt = 0;
 
   do {
     const startedAt = Date.now();
@@ -76,12 +86,21 @@ async function main() {
       consecutiveFailures = 0;
     } catch (err) {
       consecutiveFailures += 1;
-      console.error(
+      error(
         `Poll failed (${consecutiveFailures} in a row): ${err.stack ?? err}`,
       );
-      // Discard the (possibly flagged) session so the next poll starts with a
-      // fresh identity.
-      await resetSession();
+      // A fresh identity is worth one try, but churning identities every poll
+      // during a streak escalates the wall — so throttle the resets.
+      if (Date.now() - lastSessionResetAt > SESSION_RESET_COOLDOWN_MS) {
+        lastSessionResetAt = Date.now();
+        log('Resetting browser session (next attempt uses a fresh identity).');
+        await resetSession();
+      } else {
+        log(
+          'Keeping current browser session (reset throttled to once per ' +
+            `${SESSION_RESET_COOLDOWN_MS / 60000} min during failure streaks).`,
+        );
+      }
       if (
         consecutiveFailures >= FAILURE_ALERT_THRESHOLD &&
         Date.now() - lastFailureAlertAt > FAILURE_ALERT_COOLDOWN_MS
@@ -89,21 +108,26 @@ async function main() {
         lastFailureAlertAt = Date.now();
         try {
           await sendMessage(
-            `⚠️ maybelline-fb-watcher: scraping failed ${consecutiveFailures} times in a row. Last error: ${String(err).slice(0, 300)}`,
+            `⚠️ maybelline-fb-watcher: scraping failed ${consecutiveFailures} times in a row. Last error: ${String(err).slice(0, 500)}`,
           );
         } catch (alertErr) {
-          console.error(`Failed to send failure alert: ${alertErr}`);
+          error(`Failed to send failure alert: ${alertErr}`);
         }
       }
     }
     if (!runOnce) {
       const backedOff = consecutiveFailures >= BACKOFF_THRESHOLD;
+      const baseInterval =
+        consecutiveFailures >= EXTENDED_BACKOFF_THRESHOLD
+          ? EXTENDED_BACKOFF_INTERVAL_MS
+          : backedOff
+            ? BACKOFF_INTERVAL_MS
+            : POLL_INTERVAL_MS;
       if (backedOff) {
-        console.log(
-          `Backing off: ${consecutiveFailures} consecutive failures, next poll in ${BACKOFF_INTERVAL_MS / 60000} min.`,
+        log(
+          `Backing off: ${consecutiveFailures} consecutive failures, next poll in ${baseInterval / 60000} min.`,
         );
       }
-      const baseInterval = backedOff ? BACKOFF_INTERVAL_MS : POLL_INTERVAL_MS;
       // Jitter makes the request cadence less mechanical to anti-bot systems.
       const jitter = Math.floor(Math.random() * 15_000);
       const elapsed = Date.now() - startedAt;
@@ -118,14 +142,14 @@ async function main() {
 
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.on(signal, async () => {
-    console.log(`Received ${signal}, shutting down.`);
+    log(`Received ${signal}, shutting down.`);
     await closeBrowser();
     process.exit(0);
   });
 }
 
 main().catch(async (err) => {
-  console.error(`Fatal: ${err.stack ?? err}`);
+  error(`Fatal: ${err.stack ?? err}`);
   await closeBrowser();
   process.exit(1);
 });
