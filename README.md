@@ -97,9 +97,27 @@ Run the tests after keyword changes if you have Node.js installed: `npm test`.
 
 ## Troubleshooting
 
-- **`Poll failed ... Page title: "Facebook" ... Zaloguj się`** — Facebook is walling your IP.
-  On a home connection this is rare and usually temporary; the watcher backs off and recovers
-  on its own. If it persists, your network may be routing through a VPN/proxy — turn it off.
+- **`Poll failed ... Page title: "Facebook" ... Zaloguj się`** — Facebook is serving a login
+  wall to your IP. On a home connection this happens when the IP gets temporarily flagged.
+  What to do, in order:
+  1. Make sure nothing routes your traffic through a VPN/proxy (system-wide VPN, "secure DNS"
+     apps, etc.) — turn it off.
+  2. **Restart your router** — most home ISPs assign a new IP on reconnect, which clears the
+     flag immediately.
+  3. Or just wait: after 20 consecutive failures the watcher slows to one poll per 30 minutes
+     and keeps its browser session stable (resetting identity at most once per 30 min), which
+     gives the flag time to expire. It returns to 1-minute polling on the first success.
+- **Want to see what Facebook actually served?** On every failed scrape the watcher saves a
+  screenshot + HTML of the served page to the data volume. Copy them out and open them:
+
+  ```powershell
+  docker compose cp watcher:/data/last-failure-main.png .
+  docker compose cp watcher:/data/last-failure-plugin.png .
+  ```
+
+  (`-main` = the page itself, `-plugin` = the embed fallback; `.html` versions exist too.)
+- **Reading logs**: `docker compose logs -f` — every line is timestamped, and each poll logs
+  its steps (session start, page load + title, post counts), so the failing step is visible.
 - **`Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID`** — your `.env` is missing or incomplete;
   fix it and run `docker compose up -d` again.
 - **No Telegram messages arrive** — verify with the test-message command in the table above.

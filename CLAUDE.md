@@ -35,9 +35,14 @@ scrape → dedupe against seen-set → keyword filter → Telegram notify → pe
   ≤1 day old — Facebook reveals old posts to anonymous visitors unpredictably, and without this
   gate they'd fire as "new".
 - `src/scrape.js` — Playwright Chromium, one persistent context reused across polls (a fresh
-  anonymous identity every 60s trips Facebook's wall; `resetSession()` is called after a failed
-  poll). On article-render timeout it throws with the served page title + body snippet as
-  evidence. Non-obvious, empirically required behavior:
+  anonymous identity every 60s trips Facebook's wall; `resetSession()` after a failed poll is
+  **throttled in index.js to once per 30 min** — resetting on every failure of a streak churns
+  identities each poll, which escalates the wall and made a 2026-07-07 home-PC flag
+  self-sustaining for 130+ polls). On render timeout it throws with the served page title +
+  body snippet, saves a screenshot + HTML dump to `EVIDENCE_DIR` (default: dirname of
+  `STATE_FILE`, so `/data/last-failure-{main,plugin}.{png,html}` in Docker), and when both the
+  main page AND the Page Plugin fallback fail, the thrown error carries both messages (the
+  alert used to show only the plugin one). Non-obvious, empirically required behavior:
   - scrolls 3× and closes Facebook's anonymous-visitor login popup, otherwise only the top post
     is in the DOM (a pinned post would then hide new ones);
   - clicks "Wyświetl więcej"/"See more" expanders before extraction, otherwise keyword text
@@ -50,6 +55,8 @@ scrape → dedupe against seen-set → keyword filter → Telegram notify → pe
 - `src/state.js` — seen-set JSON at `STATE_FILE` (default `./state.json`, `/data/state.json` on
   Railway). The `seeded` flag makes the first run record all visible posts without notifying.
 - `src/index.js` — after 10 consecutive scrape failures sends a Telegram alert (max 1/hour).
+  Backoff tiers: ≥5 failures → 10-min polls, ≥20 → 30-min polls; back to 60s on first success.
+- `src/log.js` — ISO-timestamped `log/warn/error` used everywhere (don't add bare `console.*`).
 
 ## Secrets & env
 
@@ -85,7 +92,14 @@ delete it if the owner confirms, to stop billing.
 
 ## Operational notes
 
-- **CURRENT STATUS (2026-07-06): blocked by Facebook's datacenter-IP wall.** Facebook serves a
+- **2026-07-07: the home PC's residential IP got login-walled too** after ~a day of 60s polling
+  (alert: 130 consecutive failures, both scrape paths). Dev machine's residential IP still
+  scraped fine at the same time, so it's a per-IP flag, not a Facebook-wide change. Root cause
+  of the *persistence*: `resetSession()` ran after every failed poll → fresh anonymous identity
+  per poll → wall never lifted. Mitigations shipped: session-reset throttle (30 min), extended
+  backoff tier (30-min polls after 20 failures), failure evidence dumps to `/data`. Fastest
+  user-side recovery: router restart (new dynamic IP).
+- **Railway status (2026-07-06): blocked by Facebook's datacenter-IP wall.** Facebook serves a
   login page instead of content to cloud IPs — confirmed on Railway EU (default) and us-east4,
   on both the main page and the Page Plugin embed. Everything else works (verified end-to-end
   from a residential IP). The owner chose to leave the deployment idling in backoff mode
