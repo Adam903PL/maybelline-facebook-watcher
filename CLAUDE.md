@@ -22,12 +22,16 @@ requirement), and sends a Telegram notification via `t.me/maybaline_watcher_bot`
 Single Node.js 22+ ESM process, no framework. Flow per poll (`src/index.js`):
 scrape → dedupe against seen-set → keyword filter → Telegram notify → persist state.
 
-- `src/config.js` — **the keyword list lives here**, ordered specific→generic because the first
-  match labels the notification. Keywords are matched as contiguous substrings of lowercased,
-  diacritics-stripped text (`src/filter.js`), so Polish declension needs stems ("bilet",
-  "imprez", "wejściów" — note "wejściówek" inserts an "e" into the stem) and multiword phrases
-  need per-case variants (`festiwalu/festiwal makijażu i muzyk`). The list includes very broad
-  terms ("maybelline", "muzyk", "event") by owner request — most new posts will notify.
+- `src/config.js` — **the keyword list lives here**, as `{ label, pattern }` objects. Each
+  `pattern` is a RegExp tested against normalized (lowercase, diacritics-stripped) text; `label`
+  is the human-readable name shown in the Telegram notification. Patterns use `\w*` to absorb
+  Polish declension suffixes automatically (e.g. `festiwal\w*` matches festiwal/festiwalu/
+  festiwale/festiwali/festiwalowy). For short stems `\b` word boundaries prevent false positives
+  (e.g. `\bscen[aeyio](?!riusz)\w*` catches scena/scenie/sceny but not scenariusz). Multiword
+  phrases use `\w*` on each word to cover all grammatical cases in a single pattern
+  (e.g. `festiwal\w* makijaz\w* i muzyk\w*` covers festiwalu makijażu/festiwal makijażu/
+  festiwale makijażu). Order matters: the FIRST match labels the notification, so specific
+  phrases come before generic single words.
 - `src/filter.js` — `normalize()` maps `ł→l` explicitly (NFD does not decompose it) before
   stripping combining marks. `stripPageHeader()` cuts the "Maybelline New York 3 dni ·" header
   before keyword matching (brand keywords would otherwise match 100% of posts);

@@ -10,11 +10,11 @@ export function normalize(text) {
     .trim();
 }
 
-// Returns the first keyword whose normalized form appears in the normalized
-// text, or null when nothing matches.
+// Returns the label of the first keyword whose pattern matches in the
+// normalized text, or null when nothing matches.
 export function matchedKeyword(text, keywords) {
   const haystack = normalize(text);
-  return keywords.find((kw) => haystack.includes(normalize(kw))) ?? null;
+  return keywords.find((kw) => kw.pattern.test(haystack))?.label ?? null;
 }
 
 // Scraped article text begins with the page-name header ("Maybelline New York

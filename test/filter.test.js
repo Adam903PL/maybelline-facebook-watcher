@@ -12,26 +12,28 @@ test('normalize collapses whitespace', () => {
   assert.equal(normalize('Maybelline   New\nYork\tMusic'), 'maybelline new york music');
 });
 
-test('matches the festival keyword across declensions via the stem', () => {
+test('matches the festival keyword across declensions via regex', () => {
   for (const suffix of ['muzyki', 'muzyką', 'muzyka']) {
     const text = `Zapraszamy na FESTIWAL... o festiwalu makijażu i ${suffix} opowiemy więcej!`;
-    assert.equal(matchedKeyword(text, KEYWORDS), 'festiwalu makijażu i muzyk');
+    assert.equal(matchedKeyword(text, KEYWORDS), 'festiwal makijażu i muzyki');
   }
 });
 
 test('matches regardless of diacritics in the post text', () => {
   const text = 'wielki festiwalu makijazu i muzyki juz wkrotce';
-  assert.equal(matchedKeyword(text, KEYWORDS), 'festiwalu makijażu i muzyk');
+  assert.equal(matchedKeyword(text, KEYWORDS), 'festiwal makijażu i muzyki');
 });
 
-test('matches "Modelki" case-insensitively', () => {
-  assert.equal(matchedKeyword('Szukamy MODELKI na nasz event!', KEYWORDS), 'modelki');
+test('matches "Modelki" case-insensitively (and other declensions)', () => {
+  assert.equal(matchedKeyword('Szukamy MODELKI na sesję!', KEYWORDS), 'modelka');
+  assert.equal(matchedKeyword('Nasza modelka jest gotowa', KEYWORDS), 'modelka');
+  assert.equal(matchedKeyword('Casting na modelek!', KEYWORDS), 'modelka');
 });
 
 test('matches "Maybelline New York Music"', () => {
   assert.equal(
     matchedKeyword('Rusza Maybelline New York Music — bądźcie z nami', KEYWORDS),
-    'maybelline new york music',
+    'Maybelline New York Music',
   );
 });
 
@@ -43,8 +45,51 @@ test('matches the real "SECOND DROP" festival post', () => {
   assert.notEqual(matchedKeyword(text, KEYWORDS), null);
   assert.equal(
     matchedKeyword('Najgorętszy festiwal makijażu i muzyki tego lata', KEYWORDS),
-    'festiwal makijażu i muzyk',
+    'festiwal makijażu i muzyki',
   );
+});
+
+test('regex handles Polish declensions that substring stems missed', () => {
+  // festiwalowy, festiwalowej, festiwalowych — all absorbed by festiwal\w*
+  assert.equal(matchedKeyword('Klimat festiwalowy jest niesamowity', KEYWORDS), 'festiwal');
+  assert.equal(matchedKeyword('Atmosfery festiwalowej nie zapomnimy', KEYWORDS), 'festiwal');
+  // konkursowy, konkursowe — absorbed by konkurs\w*
+  assert.equal(matchedKeyword('Zasady konkursowe znajdziecie tutaj', KEYWORDS), 'konkurs');
+  // biletowy — absorbed by bilet\w*
+  assert.equal(matchedKeyword('System biletowy ruszył', KEYWORDS), 'bilet');
+  // artystyczny — absorbed by artyst\w*
+  assert.equal(matchedKeyword('Pokaz artystyczny wieczorem', KEYWORDS), 'artysta');
+  // wejściówka/wejściówek/wejściówki — all absorbed by wejsciow\w*
+  assert.equal(matchedKeyword('Wielkie rozdanie wejściówek', KEYWORDS), 'wejściówka');
+  assert.equal(matchedKeyword('Złap wejściówki dla siebie', KEYWORDS), 'wejściówka');
+  assert.equal(matchedKeyword('Mam wejściówkę na wieczór', KEYWORDS), 'wejściówka');
+});
+
+test('multiword phrases match across all grammatical cases with one pattern', () => {
+  // Previously needed separate entries for festiwalu/festiwal/festiwale
+  assert.equal(
+    matchedKeyword('O festiwalu makijażu i muzyki marzę!', KEYWORDS),
+    'festiwal makijażu i muzyki',
+  );
+  assert.equal(
+    matchedKeyword('Najlepszy festiwal makijażu i muzyki', KEYWORDS),
+    'festiwal makijażu i muzyki',
+  );
+  assert.equal(
+    matchedKeyword('Na festiwale makijażu i muzyki jedziemy!', KEYWORDS),
+    'festiwal makijażu i muzyki',
+  );
+  // strefa/strefie/strefą Maybelline — one pattern covers all
+  assert.equal(matchedKeyword('Wpadnij do strefy Maybelline', KEYWORDS), 'strefa Maybelline');
+  assert.equal(matchedKeyword('W strefie Maybelline czeka...', KEYWORDS), 'strefa Maybelline');
+});
+
+test('scena pattern uses word boundary to avoid false positives', () => {
+  // Should match scena, sceny, scenie, sceną
+  assert.equal(matchedKeyword('Główna scena zaprasza', KEYWORDS), 'scena');
+  assert.equal(matchedKeyword('Na scenie pojawi się gwiazda', KEYWORDS), 'scena');
+  // Should NOT match 'scenariusz' (unrelated word)
+  assert.equal(matchedKeyword('Scenariusz filmu jest świetny', KEYWORDS), null);
 });
 
 test('isFromLastDay accepts minutes, hours and "1 dzień" markers', () => {
@@ -106,10 +151,8 @@ test('stripPageHeader removes the page-name header so brand keywords only match 
 });
 
 test('broad brand and event keywords match in the post body', () => {
-  assert.equal(matchedKeyword('Kupuj produkty Maybelline w promocji', KEYWORDS), 'maybelline');
+  assert.equal(matchedKeyword('Kupuj produkty Maybelline w promocji', KEYWORDS), 'Maybelline');
   assert.equal(matchedKeyword('Zgarnij bilety na koncert!', KEYWORDS), 'koncert');
-  // "wejściówek" (gen. pl.) inserts an "e" into the stem, hence 'wejściów'
-  assert.equal(matchedKeyword('Wielkie rozdanie wejściówek', KEYWORDS), 'wejściów');
-  assert.equal(matchedKeyword('Złap wejściówki dla siebie', KEYWORDS), 'wejściów');
   assert.equal(matchedKeyword('Nasza ambasadorka zdradza sekrety', KEYWORDS), 'ambasador');
+  assert.equal(matchedKeyword('Ambasadorzy marki na festiwalu', KEYWORDS), 'festiwal');
 });

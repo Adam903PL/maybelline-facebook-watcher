@@ -6,49 +6,51 @@ export const PAGE_URL = 'https://www.facebook.com/maybellinepolska?locale=pl_PL'
 
 export const POLL_INTERVAL_MS = 60_000;
 
-// Plain keyword filter — no AI. Matched case-insensitively against a
-// diacritics-stripped copy of the post BODY (the "Maybelline New York … ·"
-// page header is stripped first, otherwise brand keywords would match every
-// post). Entries are stems where Polish declension allows it ("bilet" covers
-// bilety/biletów/bilecie; "imprez" covers impreza/imprezie). Multiword
-// phrases need per-case variants because substring matching is contiguous.
-// Order matters: the FIRST match labels the Telegram notification, so
-// specific phrases come before generic single words.
+// Keyword filter — no AI. Each entry is a { label, pattern } where `pattern`
+// is a RegExp tested against the normalized (lowercased, diacritics-stripped)
+// post BODY (the "Maybelline New York … ·" page header is stripped first,
+// otherwise brand keywords would match every post).
+//
+// Patterns use \w* to absorb Polish declension suffixes automatically:
+//   festiwal\w* → festiwal, festiwalu, festiwale, festiwali, festiwalowy…
+// For stems that are too short / ambiguous, \b word boundaries prevent false
+// positives (e.g. \bscen\w* avoids matching "scenariusz").
+//
+// Order matters: the FIRST match's label is shown in the Telegram notification,
+// so specific phrases come before generic single words.
 export const KEYWORDS = [
-  // Trzon i marka
-  'festiwalu makijażu i muzyk',
-  'festiwal makijażu i muzyk',
-  'festiwal maybelline',
-  'festiwalu maybelline',
-  'strefa maybelline',
-  'strefie maybelline',
-  'maybelline new york music',
-  '#maybellinepolska',
-  'maybelline ny',
-  'maybelline polska',
-  'maybelline',
-  'modelki',
-  // Festiwal i muzyka
-  'strefa festiwalow',
-  'strefie festiwalow',
-  'festiwal',
-  'koncert',
-  'muzyk',
-  'scen',
-  'line-up',
-  'lineup',
-  'artyści',
-  'artyst',
-  'event',
-  'imprez',
-  'występ',
-  // Akcja i dostępność
-  'bilet',
-  'wejściów',
-  'konkurs',
-  'rozdani',
-  'zaproszeni',
-  'ambasador',
+  // ── Core event phrases ────────────────────────────────────────────────
+  { label: 'festiwal makijażu i muzyki',  pattern: /festiwal\w* makijaz\w* i muzyk\w*/ },
+  { label: 'festiwal Maybelline',         pattern: /festiwal\w* maybelline/ },
+  { label: 'strefa Maybelline',           pattern: /stref\w* maybelline/ },
+  { label: 'Maybelline New York Music',   pattern: /maybelline new york music/ },
+
+  // ── Brand ─────────────────────────────────────────────────────────────
+  { label: '#maybellinepolska',           pattern: /#maybellinepolska/ },
+  { label: 'Maybelline NY',              pattern: /maybelline ny\b/ },
+  { label: 'Maybelline Polska',          pattern: /maybelline polska/ },
+  { label: 'Maybelline',                 pattern: /maybelline/ },
+  { label: 'modelka',                    pattern: /modele?k\w*/ },
+
+  // ── Festival & music ──────────────────────────────────────────────────
+  { label: 'strefa festiwalowa',          pattern: /stref\w* festiwal\w*/ },
+  { label: 'festiwal',                   pattern: /festiwal\w*/ },
+  { label: 'koncert',                    pattern: /koncert\w*/ },
+  { label: 'muzyka',                     pattern: /muzyk\w*/ },
+  { label: 'scena',                      pattern: /\bscen[aeyio](?!riusz)\w*/ },
+  { label: 'line-up',                    pattern: /line-?up\w*/ },
+  { label: 'artysta',                    pattern: /artyst\w*/ },
+  { label: 'event',                      pattern: /\bevent\w*/ },
+  { label: 'impreza',                    pattern: /imprez\w*/ },
+  { label: 'występ',                     pattern: /wystep\w*/ },
+
+  // ── Tickets & access ──────────────────────────────────────────────────
+  { label: 'bilet',                      pattern: /bilet\w*/ },
+  { label: 'wejściówka',                 pattern: /wejsciow\w*/ },
+  { label: 'konkurs',                    pattern: /konkurs\w*/ },
+  { label: 'rozdanie',                   pattern: /rozdan\w*/ },
+  { label: 'zaproszenie',                pattern: /zaproszen\w*/ },
+  { label: 'ambasador',                  pattern: /ambasador\w*/ },
 ];
 
 export const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
