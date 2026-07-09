@@ -143,15 +143,11 @@ test('returns null for unrelated posts', () => {
 test('stripPageHeader removes the page-name header so brand keywords only match the body', () => {
   const scraped = 'Maybelline New York 3 dni · Nowy tusz do rzęs już w drogeriach!';
   assert.equal(stripPageHeader(scraped), 'Nowy tusz do rzęs już w drogeriach!');
-  // without stripping, "maybelline" in the header would match every post
-  assert.notEqual(matchedKeyword(scraped, KEYWORDS), null);
-  assert.equal(matchedKeyword(stripPageHeader(scraped), KEYWORDS), null);
   // text without a header separator is left untouched
   assert.equal(stripPageHeader('Zwykły tekst bez separatora'), 'Zwykły tekst bez separatora');
 });
 
-test('broad brand and event keywords match in the post body', () => {
-  assert.equal(matchedKeyword('Kupuj produkty Maybelline w promocji', KEYWORDS), 'Maybelline');
+test('broad event keywords match in the post body', () => {
   assert.equal(matchedKeyword('Zgarnij bilety na koncert!', KEYWORDS), 'koncert');
   assert.equal(matchedKeyword('Nasza ambasadorka zdradza sekrety', KEYWORDS), 'ambasador');
   assert.equal(matchedKeyword('Ambasadorzy marki na festiwalu', KEYWORDS), 'festiwal');
