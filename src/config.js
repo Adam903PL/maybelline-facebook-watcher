@@ -52,7 +52,16 @@ export const KEYWORDS = [
 ];
 
 export const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-export const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+
+// Supports multiple chat IDs (comma-separated) so the bot can notify both
+// a private chat and a group simultaneously. TELEGRAM_CHAT_IDS takes priority;
+// falls back to legacy TELEGRAM_CHAT_ID for backwards compatibility.
+const rawChatIds = process.env.TELEGRAM_CHAT_IDS ?? process.env.TELEGRAM_CHAT_ID ?? '';
+export const TELEGRAM_CHAT_IDS = rawChatIds
+  .split(',')
+  .map((id) => id.trim())
+  .filter(Boolean);
+
 export const STATE_FILE = process.env.STATE_FILE ?? './state.json';
 
 // Identifies WHICH deployment a Telegram message came from (startup message

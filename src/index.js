@@ -4,7 +4,7 @@ import {
   POLL_INTERVAL_MS,
   STATE_FILE,
   TELEGRAM_BOT_TOKEN,
-  TELEGRAM_CHAT_ID,
+  TELEGRAM_CHAT_IDS,
 } from './config.js';
 import { isFromLastDay, matchedKeyword, stripPageHeader } from './filter.js';
 import { error, log } from './log.js';
@@ -28,9 +28,9 @@ const EXTENDED_BACKOFF_INTERVAL_MS = 30 * 60 * 1000;
 // streak. During a streak, keep the session and reset at most this often.
 const SESSION_RESET_COOLDOWN_MS = 30 * 60 * 1000;
 
-if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+if (!TELEGRAM_BOT_TOKEN || TELEGRAM_CHAT_IDS.length === 0) {
   error(
-    'Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID — set them in .env (local) or service variables (Railway).',
+    'Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_IDS/TELEGRAM_CHAT_ID — set them in .env (local) or service variables (Railway).',
   );
   process.exit(1);
 }

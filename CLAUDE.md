@@ -63,9 +63,10 @@ scrape → dedupe against seen-set → keyword filter → Telegram notify → pe
 
 ## Secrets & env
 
-- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (chat id: message the bot, then `getUpdates`),
-  optional `STATE_FILE`. Local `.env` is hook-protected — the user edits it themselves; for
-  ad-hoc local runs pass env vars inline instead.
+- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_IDS` (comma-separated list of chat IDs — supports
+  both private chats and groups simultaneously; falls back to legacy `TELEGRAM_CHAT_ID` for
+  backwards compatibility), optional `STATE_FILE`. Local `.env` is hook-protected — the user
+  edits it themselves; for ad-hoc local runs pass env vars inline instead.
 
 ## Deployment
 
